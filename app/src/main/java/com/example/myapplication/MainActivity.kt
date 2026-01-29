@@ -9,6 +9,7 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -54,9 +55,17 @@ import com.example.myapplication.viewModule.ImageUrl
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import com.example.myapplication.viewModule.Message
+import java.io.ByteArrayOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.Image
+import java.nio.ByteBuffer
+import com.example.myapplication.R
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -120,18 +129,25 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     // 音频录制状态
     var isRecording by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
+    // 加载状态
+    var isLoading by remember { mutableStateOf(false) }
+    // 错误信息
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
     // 相机预览视图
     val previewView = remember { PreviewView(context) }
     var imageCapture: ImageCapture? = remember { null }
+    var cameraProvider: ProcessCameraProvider? = remember { null }
 
     // 初始化相机
-    LaunchedEffect(Unit) {
+    fun initializeCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
+        cameraProviderFuture.addListener({ 
+            val provider = cameraProviderFuture.get()
+            cameraProvider = provider
+            
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
@@ -141,19 +157,99 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                provider.unbindAll()
+                provider.bindToLifecycle(
                     lifecycleOwner as LifecycleOwner,
                     cameraSelector,
                     preview,
                     imageCapture
                 )
+                Log.d("CameraX", "相机初始化成功")
             } catch (exc: Exception) {
                 Log.e("CameraX", "Use case binding failed", exc)
+                errorMessage = "相机初始化失败: ${exc.message}"
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
+    // 首次初始化相机
+    LaunchedEffect(Unit) {
+        initializeCamera()
+    }
+
+    // 拍照并发送给AI
+    fun takePhotoAndSendToAI() {
+        isLoading = true
+        errorMessage = null
+
+        // 重新初始化相机以确保可用
+        initializeCamera()
+
+        // 等待相机初始化完成
+        Handler(Looper.getMainLooper()).postDelayed({
+            val imageCapture = imageCapture ?: run {
+                errorMessage = "相机未初始化"
+                isLoading = false
+                return@postDelayed
+            }
+
+            // 创建临时文件
+            val photoFile = File.createTempFile("temp_photo", ".jpg", context.cacheDir)
+            val outputFileOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+            // 拍照
+            imageCapture.takePicture(
+                outputFileOptions,
+                ContextCompat.getMainExecutor(context),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                        try {
+                            // 将图片转换为Base64
+                            val base64Image = bitmapToBase64(photoFile)
+                            if (base64Image.isNullOrEmpty()) {
+                                errorMessage = "图片转换失败"
+                                isLoading = false
+                                // 删除临时文件
+                                photoFile.delete()
+                                return
+                            }
+
+                            // 构建请求消息
+                            val userMessages = listOf(
+                                Content(
+                                    type = "image_url",
+                                    image_url = ImageUrl(url = "data:image/jpeg;base64,$base64Image")
+                                ),
+                                Content(
+                                    type = "text",
+                                    text = context.getString(R.string.ai_prompt_what)
+                                )
+                            )
+
+                            // 发送给AI
+                            viewModel.fetchPost("qwen3-vl-plus", userMessages, "sk-ee10fa059ce846468490b65eb61a278a")
+
+                            // 删除临时文件
+                            photoFile.delete()
+                        } catch (e: Exception) {
+                            Log.e("PhotoAI", "处理图片失败", e)
+                            errorMessage = "处理图片失败: ${e.message}"
+                            // 删除临时文件
+                            photoFile.delete()
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        Log.e("PhotoAI", "拍照失败", exception)
+                        errorMessage = "拍照失败: ${exception.message}"
+                        isLoading = false
+                    }
+                }
+            )
+        }, 500)
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column {
@@ -162,27 +258,27 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
             Button(
                 onClick = {
-                    // 触发网络请求
-                    val userMessages = listOf(
-                        Content(
-                            type = "image_url",
-                            image_url = ImageUrl(url = "https://dashscope.oss-cn-beijing.aliyuncs.com/images/dog_and_girl.jpeg")
-                        ),
-                        Content(
-                            type = "text",
-                            text = "用这个格式告诉我主体是什么，例如：这是狗"
-                        )
-                    )
-                    viewModel.fetchPost("qwen3-vl-plus", userMessages, "sk-ee10fa059ce846468490b65eb61a278a")
+                    takePhotoAndSendToAI()
                 }
             ) {
-                Text("发起请求")
+                if (isLoading) {
+                    Text("处理中...")
+                } else {
+                    Text("拍照并分析")
+                }
             }
+            
+            // 显示错误信息
+            if (!errorMessage.isNullOrEmpty()) {
+                Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
+            }
+            
+            // 显示AI响应
             val currentResult = viewModel._postState.value?.choices?.firstOrNull()?.message?.content
             Log.d("currentResult", "currentResult: $currentResult")
             if (!currentResult.isNullOrEmpty()) {
                 Text(currentResult)
-            } else {
+            } else if (!isLoading && errorMessage.isNullOrEmpty()) {
                 Text("等待响应...")
             }
 
@@ -220,6 +316,20 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
 
         }
+    }
+}
+
+// 将图片文件转换为Base64编码
+private fun bitmapToBase64(file: File): String? {
+    return try {
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, byteArrayOutputStream)
+        val byteArray = byteArrayOutputStream.toByteArray()
+        Base64.encodeToString(byteArray, Base64.NO_WRAP)
+    } catch (e: Exception) {
+        Log.e("Base64", "转换失败", e)
+        null
     }
 }
 

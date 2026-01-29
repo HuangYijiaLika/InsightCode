@@ -4,6 +4,7 @@ build/
 
 # IDE
 .idea/
+.trae/
 *.iml
 *.ipr
 *.iws

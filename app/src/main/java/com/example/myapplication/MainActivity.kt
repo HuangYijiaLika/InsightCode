@@ -428,7 +428,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
             
             // 2. 保存历史voice_text
-            historyVoiceText = aiResponse.voice_text
+            historyVoiceText +=aiResponse.voice_text+","
             // 3. 根据vibration_mode进行震动
             // 4. 如果is_task_complete为假，定时自动发送图片
             if (!aiResponse.is_task_complete) {

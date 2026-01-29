@@ -9,6 +9,9 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.Base64
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -66,6 +69,24 @@ import android.graphics.BitmapFactory
 import android.media.Image
 import java.nio.ByteBuffer
 import com.example.myapplication.R
+import android.content.Intent
+import java.util.Locale
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -129,10 +150,16 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     // 音频录制状态
     var isRecording by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
+    // 语音识别相关
+    var isRecognizing by remember { mutableStateOf(false) }
+    var recognizedText by remember { mutableStateOf("") }
+    var speechRecognizer: SpeechRecognizer? = remember { null }
     // 加载状态
     var isLoading by remember { mutableStateOf(false) }
     // 错误信息
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    // 协程作用域
+    val coroutineScope = rememberCoroutineScope()
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
@@ -170,6 +197,88 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                 errorMessage = "相机初始化失败: ${exc.message}"
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    // 初始化语音识别
+    fun initializeSpeechRecognizer() {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    Log.d("SpeechRecognition", "准备就绪")
+                }
+
+                override fun onBeginningOfSpeech() {
+                    Log.d("SpeechRecognition", "开始说话")
+                }
+
+                override fun onRmsChanged(rmsdB: Float) {
+                }
+
+                override fun onBufferReceived(buffer: ByteArray?) {
+                }
+
+                override fun onEndOfSpeech() {
+                    Log.d("SpeechRecognition", "结束说话")
+                }
+
+                override fun onError(error: Int) {
+                    Log.e("SpeechRecognition", "错误: $error")
+                    isRecognizing = false
+                }
+
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        recognizedText = matches[0]
+                        Log.d("SpeechRecognition", "识别结果: ${matches[0]}")
+                    }
+                    isRecognizing = false
+                }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        recognizedText = matches[0]
+                        Log.d("SpeechRecognition", "部分结果: ${matches[0]}")
+                    }
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) {
+                }
+            })
+        } else {
+            errorMessage = "设备不支持语音识别"
+        }
+    }
+
+    // 开始语音识别
+    fun startSpeechRecognition() {
+        if (speechRecognizer == null) {
+            initializeSpeechRecognizer()
+        }
+
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.CHINA.toString())
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+
+        try {
+            speechRecognizer?.startListening(intent)
+            isRecognizing = true
+            // 清空之前的文字
+            recognizedText = ""
+        } catch (e: Exception) {
+            Log.e("SpeechRecognition", "启动失败", e)
+            errorMessage = "语音识别启动失败: ${e.message}"
+            isRecognizing = false
+        }
+    }
+
+    // 停止语音识别
+    fun stopSpeechRecognition() {
+        speechRecognizer?.stopListening()
+        isRecognizing = false
     }
 
     // 首次初始化相机
@@ -284,20 +393,64 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
             // 录音控制按钮
             if (hasMicrophonePermission) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            if (isRecording) {
-                                stopRecording()
-                            } else {
-                                startRecording(recordedAudioData, context) // 传递 context 参数
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // 长按录音按钮
+                    Box(
+                        modifier = Modifier
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        // 长按开始录音和语音识别
+                                        startSpeechRecognition()
+                                        // 等待用户释放
+                                        tryAwaitRelease()
+                                        // 释放后停止识别
+                                        stopSpeechRecognition()
+                                    },
+                                    onTap = {
+                                        // 点击事件：刷新文字
+                                        recognizedText = ""
+                                    }
+                                )
                             }
-                            isRecording = !isRecording
-                        }
                     ) {
-                        Text(if (isRecording) "停止录音" else "开始录音")
+                        Button(
+                            modifier = Modifier
+                                .width(200.dp)
+                                .height(60.dp),
+                            onClick = {
+                                // 点击事件：刷新文字
+                                recognizedText = ""
+                            }
+                        ) {
+                            Text(
+                                if (isRecognizing) "正在识别..." else "长按录音",
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
 
+                    // 显示识别的文字
+                    if (recognizedText.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                                .wrapContentHeight(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        ) {
+                            Text(
+                                text = recognizedText,
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+
+                    // 播放录音按钮
                     Button(
                         onClick = {
                             if (!isPlaying && recordedAudioData.isNotEmpty()) {
@@ -307,7 +460,10 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                 isPlaying = true
                             }
                         },
-//                        enabled = !isPlaying && recordedAudioData.isNotEmpty()
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(60.dp)
+                            .padding(top = 8.dp)
                     ) {
                         Text("播放录音")
                     }

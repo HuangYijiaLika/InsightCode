@@ -84,5 +84,9 @@ dependencies {
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
     //图片显示
     implementation("io.coil-kt:coil-compose:2.4.0")
+    
+    // 语音识别
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.6.2")
 
 }

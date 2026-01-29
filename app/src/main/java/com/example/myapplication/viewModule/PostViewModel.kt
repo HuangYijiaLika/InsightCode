@@ -61,6 +61,15 @@ data class GetMessage(
     val reasoning_content: String
 )
 
+// AI响应的JSON结构
+data class AIResponseJson(
+    val voice_text: String,
+    val vibration_mode: String,
+    val is_task_complete: Boolean,
+    val next_transmission_ms: Int,
+    val interaction_grid: Map<String, String>? = null
+)
+
 interface ApiService {
     @POST("chat/completions")
     suspend fun getPost(

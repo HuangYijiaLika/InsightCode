@@ -87,6 +87,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import android.speech.tts.TextToSpeech
+import android.os.Vibrator
+import android.content.Context
+import android.os.Build
+import com.google.gson.Gson
+import com.example.myapplication.viewModule.AIResponseJson
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -154,12 +160,22 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     var isRecognizing by remember { mutableStateOf(false) }
     var recognizedText by remember { mutableStateOf("") }
     var speechRecognizer: SpeechRecognizer? = remember { null }
+    // 文字转语音相关
+    var textToSpeech: TextToSpeech? = remember { null }
+    // 震动相关
+    var vibrator: Vibrator? = remember { null }
     // 加载状态
     var isLoading by remember { mutableStateOf(false) }
     // 错误信息
     var errorMessage by remember { mutableStateOf<String?>(null) }
     // 协程作用域
     val coroutineScope = rememberCoroutineScope()
+    // 历史voice_text
+    var historyVoiceText by remember { mutableStateOf("") }
+    // 自动发送处理器
+    var autoSendHandler: Handler? = remember { null }
+    // 任务完成状态
+    var isTaskComplete by remember { mutableStateOf(false) }
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
@@ -252,42 +268,62 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
         }
     }
 
-    // 开始语音识别
-    fun startSpeechRecognition() {
-        if (speechRecognizer == null) {
-            initializeSpeechRecognizer()
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.CHINA.toString())
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-
-        try {
-            speechRecognizer?.startListening(intent)
-            isRecognizing = true
-            // 清空之前的文字
-            recognizedText = ""
-        } catch (e: Exception) {
-            Log.e("SpeechRecognition", "启动失败", e)
-            errorMessage = "语音识别启动失败: ${e.message}"
-            isRecognizing = false
+    // 初始化文字转语音
+    fun initializeTextToSpeech() {
+        textToSpeech = TextToSpeech(context) {
+            if (it == TextToSpeech.SUCCESS) {
+                textToSpeech?.setLanguage(Locale.CHINA)
+                Log.d("TextToSpeech", "初始化成功")
+            } else {
+                Log.e("TextToSpeech", "初始化失败")
+            }
         }
     }
 
-    // 停止语音识别
-    fun stopSpeechRecognition() {
-        speechRecognizer?.stopListening()
-        isRecognizing = false
+    // 初始化震动器
+    fun initializeVibrator() {
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            context.getSystemService(Vibrator::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
     }
 
-    // 首次初始化相机
-    LaunchedEffect(Unit) {
-        initializeCamera()
+    // 文字转语音
+    fun speakText(text: String) {
+        if (textToSpeech == null) {
+            initializeTextToSpeech()
+        }
+        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
     }
 
+    // 根据vibration_mode进行震动
+    fun vibrateBasedOnMode(mode: String) {
+        if (vibrator == null) {
+            initializeVibrator()
+        }
+
+        val pattern = when (mode) {
+            "low_freq" -> longArrayOf(0, 200, 100, 200) // 低频震动
+            "high_freq" -> longArrayOf(0, 50, 50, 50, 50, 50) // 高频震动
+            "swipe_left" -> longArrayOf(0, 100, 50, 100, 50, 200) // 向左滑动震动
+            "swipe_right" -> longArrayOf(0, 200, 50, 100, 50, 100) // 向右滑动震动
+            else -> longArrayOf(0, 100) // 默认震动
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val vibrationEffect = android.os.VibrationEffect.createWaveform(pattern, -1)
+            vibrator?.vibrate(vibrationEffect)
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(pattern, -1)
+        }
+    }
+
+    
     // 拍照并发送给AI
-    fun takePhotoAndSendToAI() {
+    fun takePhotoAndSendToAI(includeHistory: Boolean = false) {
         isLoading = true
         errorMessage = null
 
@@ -324,16 +360,38 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                             }
 
                             // 构建请求消息
-                            val userMessages = listOf(
+                            val userMessages = mutableListOf<Content>()
+                            
+                            // 添加图片
+                            userMessages.add(
                                 Content(
                                     type = "image_url",
                                     image_url = ImageUrl(url = "data:image/jpeg;base64,$base64Image")
-                                ),
+                                )
+                            )
+                            
+                            // 添加提示词
+                            userMessages.add(
                                 Content(
                                     type = "text",
                                     text = context.getString(R.string.ai_prompt_what)
                                 )
                             )
+                            userMessages.add(
+                                Content(
+                                    type = "text",
+                                    text = "请带我去灶台前."
+                                )
+                            )
+                            // 如果需要包含历史voice_text
+                            if (includeHistory && historyVoiceText.isNotEmpty()) {
+                                userMessages.add(
+                                    Content(
+                                        type = "text",
+                                        text = "历史语音指令: $historyVoiceText"
+                                    )
+                                )
+                            }
 
                             // 发送给AI
                             viewModel.fetchPost("qwen3-vl-plus", userMessages, "sk-ee10fa059ce846468490b65eb61a278a")
@@ -359,6 +417,72 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             )
         }, 500)
     }
+    // 处理AI响应的JSON
+    fun processAIResponseJson(jsonString: String) {
+        try {
+            val gson = Gson()
+            val aiResponse = gson.fromJson(jsonString, AIResponseJson::class.java)
+
+            // 1. 将voice_text转语音
+            speakText(aiResponse.voice_text)
+
+            // 2. 根据vibration_mode进行震动
+            vibrateBasedOnMode(aiResponse.vibration_mode)
+
+            // 3. 保存历史voice_text
+            historyVoiceText = aiResponse.voice_text
+
+            // 4. 如果is_task_complete为假，定时自动发送图片
+            if (!aiResponse.is_task_complete) {
+                autoSendHandler?.removeCallbacksAndMessages(null)
+                autoSendHandler = Handler(Looper.getMainLooper())
+                autoSendHandler?.postDelayed({
+                    takePhotoAndSendToAI(true)
+                }, aiResponse.next_transmission_ms.toLong())
+            } else {
+                isTaskComplete = true
+                autoSendHandler?.removeCallbacksAndMessages(null)
+            }
+        } catch (e: Exception) {
+            Log.e("AIResponse", "解析JSON失败", e)
+            errorMessage = "解析AI响应失败: ${e.message}"
+        }
+    }
+
+    // 开始语音识别
+    fun startSpeechRecognition() {
+        if (speechRecognizer == null) {
+            initializeSpeechRecognizer()
+        }
+
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.CHINA.toString())
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+
+        try {
+            speechRecognizer?.startListening(intent)
+            isRecognizing = true
+            // 清空之前的文字
+            recognizedText = ""
+        } catch (e: Exception) {
+            Log.e("SpeechRecognition", "启动失败", e)
+            errorMessage = "语音识别启动失败: ${e.message}"
+            isRecognizing = false
+        }
+    }
+
+    // 停止语音识别
+    fun stopSpeechRecognition() {
+        speechRecognizer?.stopListening()
+        isRecognizing = false
+    }
+
+    // 首次初始化相机
+    LaunchedEffect(Unit) {
+        initializeCamera()
+    }
+
 
     Box(modifier = modifier.fillMaxSize()) {
         Column {
@@ -385,6 +509,15 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             // 显示AI响应
             val currentResult = viewModel._postState.value?.choices?.firstOrNull()?.message?.content
             Log.d("currentResult", "currentResult: $currentResult")
+            
+            // 监听AI响应变化并处理
+            LaunchedEffect(currentResult) {
+                if (!currentResult.isNullOrEmpty()) {
+                    // 处理AI响应的JSON
+                    processAIResponseJson(currentResult)
+                }
+            }
+            
             if (!currentResult.isNullOrEmpty()) {
                 Text(currentResult)
             } else if (!isLoading && errorMessage.isNullOrEmpty()) {

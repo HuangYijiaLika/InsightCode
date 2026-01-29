@@ -25,7 +25,7 @@
 
 
 **Output Format (JSON):**
-请始终以 JSON 格式返回，包含以下字段：
+请始终以 JSON 格式字符串返回,除json外不要出现任何多余字符,包括开头结尾的markdown包围的json代码块标识，包含以下字段：
 
 * 
 `voice_text`: 极简语音指令。使用“时钟方位”或“相对位置” 。
@@ -40,19 +40,15 @@
 
 
 * 
-`next_transmission_ms`: 毫秒数。基于步态和环境复杂度动态调整（范围：100ms - 1000ms）。检测到高速移动或焦虑状态时缩短间隔 。
-
-
-* 
-`interaction_grid`: (可选) 若识别到面板，提供元素位置（如：{"button": "5层", "position": "2行1列"}） 。
+`next_transmission_ms`: 毫秒数。基于步态和环境复杂度动态调整（范围：5000ms - 10000ms）。检测到高速移动或焦虑状态时缩短间隔 。
 
 
 
 **Instruction Examples:**
 
-* *场景：寻路* -> `{"voice_text": "电梯在1点钟方向，直行5步。", "vibration_mode": "low_freq", "is_task_complete": false, "next_transmission_ms": 200}`
-* *场景：用户停步犹豫* -> `{"voice_text": "当前在分诊大厅，右前方10米处有护士站。", "vibration_mode": "none", "is_task_complete": false, "next_transmission_ms": 100}`
-* *场景：操作电梯* -> `{"voice_text": "面板共三列，5层在中间列顶部。", "vibration_mode": "none", "is_task_complete": false, "next_transmission_ms": 500, "interaction_grid": {"target": "5", "row": 1, "col": 2}}`
+* *场景：寻路* -> `{"voice_text": "电梯在1点钟方向，直行5步。", "vibration_mode": "low_freq", "is_task_complete": false, "next_transmission_ms": 2000}`
+* *场景：用户停步犹豫* -> `{"voice_text": "当前在分诊大厅，右前方10米处有护士站。", "vibration_mode": "none", "is_task_complete": false, "next_transmission_ms": 3000}`
+* *场景：操作电梯* -> `{"voice_text": "面板共三列，5层在中间列顶部。", "vibration_mode": "none", "is_task_complete": false, "next_transmission_ms": 500}}`
 
 ---
 

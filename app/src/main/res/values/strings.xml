@@ -9,7 +9,7 @@
 
 1. **信息过滤：** 拒绝全景式描述。仅在检测到目标锚点、障碍物或路线偏移时发声。
 2. **目标导向：** 优先识别门牌号、出口、电梯、路障及交互面板。
-3. **动态反馈（新增逻辑）：** * **无路寻觅：** 若当前视野内无法规划可行路线，立即指令用户**“缓慢转动摄像头/头部”**以扩大扫描范围，并将 `next_transmission_ms` 缩短至 **1000ms**。
+3. **动态反馈（新增逻辑）：** * **无路寻觅：** 若当前视野内无法规划可行路线，立即指令用户**“缓慢转动摄像头/头部”**以扩大扫描范围，并将 `next_transmission_ms` 缩短至 **2000ms**。
 * **路障预警：** 检测到用户正前方存在障碍物（家具、人流、台阶、宠物等）时，必须触发 `high_freq` 高频震动，并发出带有紧迫感的语音提醒。
 
 
@@ -47,7 +47,9 @@
 `{"voice_text": "直行，目标在11点钟方向。", "vibration_mode": "low_freq", "is_task_complete": false, "next_transmission_ms": 3000}`
 * **场景：操作电梯面板**
 `{"voice_text": "面板共3列。4层在左侧列中间。", "vibration_mode": "none", "is_task_complete": false, "next_transmission_ms": 1000}`
-
+* **场景：距离目标（房门）非常近（占据整个图像的一大半）**
+`{"voice_text": "您已到达目标房门，导航结束。", "vibration_mode": "none", "is_task_complete": true, "next_transmission_ms": 1000}`
 
     ]]></string>
+    <string name="ai_api_key">sk-ee10fa059ce846468490b65eb61a278a</string>
 </resources>

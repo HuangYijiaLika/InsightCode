@@ -185,6 +185,8 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     var pressPosition by remember { mutableStateOf(Offset.Zero) }
     // 解析后的voice_text
     var voiceText by remember { mutableStateOf("") }
+    // 用户是否已经点击过
+    var hasClicked by remember { mutableStateOf(false) }
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
@@ -393,17 +395,17 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                 )
                             )
                             // 如果需要包含历史voice_text
-                            if (includeHistory && historyVoiceText.isNotEmpty()) {
+                            /*if (includeHistory && historyVoiceText.isNotEmpty()) {
                                 userMessages.add(
                                     Content(
                                         type = "text",
                                         text = "历史语音指令，仅作为参考: $historyVoiceText"
                                     )
                                 )
-                            }
+                            }*/
 
                             // 发送给AI
-                            viewModel.fetchPost("qwen3-vl-flash", userMessages, "sk-ee10fa059ce846468490b65eb61a278a")
+                            viewModel.fetchPost("qwen3-vl-flash", userMessages, context.getString(R.string.ai_api_key))
 
                             // 删除临时文件
                             photoFile.delete()
@@ -535,7 +537,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
             if (voiceText.isNotEmpty()) {
                 Text(voiceText)
-            } else if (!isLoading && errorMessage.isNullOrEmpty()) {
+            } else if (hasClicked && !isRecognizing /*&& !isLoading && errorMessage.isNullOrEmpty()*/) {
                 Text("好的，为你导航到厨房灶台。")
             }
 
@@ -567,6 +569,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                 },*/
                                 onPress = { offset ->
                                     if (hasMicrophonePermission) {
+                                        hasClicked = true
                                         pressPosition = offset
                                         isPressed = true
                                         // 按下时震动

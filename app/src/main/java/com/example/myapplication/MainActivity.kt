@@ -420,8 +420,15 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     // 处理AI响应的JSON
     fun processAIResponseJson(jsonString: String) {
         try {
+            // 去除可能的```json```和```标记
+            val cleanedJsonString = jsonString
+                .trim()
+                .removePrefix("```json")
+                .removeSuffix("```")
+                .trim()
+            
             val gson = Gson()
-            val aiResponse = gson.fromJson(jsonString, AIResponseJson::class.java)
+            val aiResponse = gson.fromJson(cleanedJsonString, AIResponseJson::class.java)
 
             // 1. 将voice_text转语音
             speakText(aiResponse.voice_text)
@@ -491,12 +498,16 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             Button(
                 onClick = {
                     takePhotoAndSendToAI()
-                }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.33f)
+                    .align(Alignment.CenterHorizontally)
             ) {
                 if (isLoading) {
                     Text("处理中...")
                 } else {
-                    Text("拍照并分析")
+                    Text("呼唤小安")
                 }
             }
             
@@ -523,7 +534,8 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                 Text("等待响应...")
             }
 
-            // 录音控制按钮
+            // 录音控制按钮已隐藏
+            /*
             if (hasMicrophonePermission) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -601,6 +613,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                     }
                 }
             }
+            */
 
 
         }

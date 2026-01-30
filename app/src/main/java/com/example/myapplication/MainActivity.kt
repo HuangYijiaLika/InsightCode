@@ -87,6 +87,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.IntOffset
 import android.speech.tts.TextToSpeech
 import android.os.Vibrator
 import android.content.Context
@@ -176,6 +180,11 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     var autoSendHandler: Handler? = remember { null }
     // 任务完成状态
     var isTaskComplete by remember { mutableStateOf(false) }
+    // 点击位置和光晕状态
+    var isPressed by remember { mutableStateOf(false) }
+    var pressPosition by remember { mutableStateOf(Offset.Zero) }
+    // 解析后的voice_text
+    var voiceText by remember { mutableStateOf("") }
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
@@ -388,13 +397,13 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                 userMessages.add(
                                     Content(
                                         type = "text",
-                                        text = "历史语音指令: $historyVoiceText"
+                                        text = "历史语音指令，仅作为参考: $historyVoiceText"
                                     )
                                 )
                             }
 
                             // 发送给AI
-                            viewModel.fetchPost("qwen3-vl-plus", userMessages, "sk-ee10fa059ce846468490b65eb61a278a")
+                            viewModel.fetchPost("qwen3-vl-flash", userMessages, "sk-ee10fa059ce846468490b65eb61a278a")
 
                             // 删除临时文件
                             photoFile.delete()
@@ -429,6 +438,9 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             
             val gson = Gson()
             val aiResponse = gson.fromJson(cleanedJsonString, AIResponseJson::class.java)
+
+            // 保存voice_text到状态变量
+            voiceText = aiResponse.voice_text
 
             // 1. 将voice_text转语音
             speakText(aiResponse.voice_text)
@@ -492,34 +504,27 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     Box(modifier = modifier.fillMaxSize()) {
         Column {
-            // 显示相机预览
-            AndroidView(factory = { previewView }, modifier = Modifier.weight(1f))
-
-            Button(
-                onClick = {
-                    takePhotoAndSendToAI()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.33f)
-                    .align(Alignment.CenterHorizontally)
-            ) {
-                if (isLoading) {
-                    Text("处理中...")
-                } else {
-                    Text("呼唤小安")
-                }
-            }
-            
             // 显示错误信息
             if (!errorMessage.isNullOrEmpty()) {
                 Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
             }
-            
+
+            // 语音识别状态提示
+            if (isRecognizing) {
+                Text(
+                    text = "🎤 正在聆听（点击/长按说话）",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
+                )
+            }
+
             // 显示AI响应
             val currentResult = viewModel._postState.value?.choices?.firstOrNull()?.message?.content
             Log.d("currentResult", "currentResult: $currentResult")
-            
+
             // 监听AI响应变化并处理
             LaunchedEffect(currentResult) {
                 if (!currentResult.isNullOrEmpty()) {
@@ -527,11 +532,73 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                     processAIResponseJson(currentResult)
                 }
             }
-            
-            if (!currentResult.isNullOrEmpty()) {
-                Text(currentResult)
+
+            if (voiceText.isNotEmpty()) {
+                Text(voiceText)
             } else if (!isLoading && errorMessage.isNullOrEmpty()) {
-                Text("等待响应...")
+                Text("好的，为你导航到厨房灶台。")
+            }
+
+            // 显示相机预览
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+            ) {
+                AndroidView(
+                    factory = { previewView },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                /*onTap = { offset ->
+                                    if (hasMicrophonePermission) {
+                                        pressPosition = offset
+                                        isPressed = true
+                                        recognizedText = "正在识别..."
+                                        startSpeechRecognition()
+                                        coroutineScope.launch {
+                                            delay(3000)
+                                            stopSpeechRecognition()
+                                            isPressed = false
+                                        }
+                                    } else {
+                                        errorMessage = "请先授予麦克风权限"
+                                    }
+                                },*/
+                                onPress = { offset ->
+                                    if (hasMicrophonePermission) {
+                                        pressPosition = offset
+                                        isPressed = true
+                                        // 按下时震动
+                                        vibrateBasedOnMode("low_freq")
+                                        recognizedText = "长按识别中..."
+                                        startSpeechRecognition()
+                                        tryAwaitRelease()
+                                        stopSpeechRecognition()
+                                        // 抬起时震动
+                                        vibrateBasedOnMode("low_freq")
+                                        isPressed = false
+                                        takePhotoAndSendToAI()
+                                    } else {
+                                        errorMessage = "请先授予麦克风权限"
+                                    }
+                                }
+                            )
+                        }
+                )
+
+                // 光晕效果
+                if (isPressed) {
+                    androidx.compose.foundation.Canvas(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        drawCircle(
+                            color = Color.Blue.copy(alpha = 0.3f),
+                            radius = 50f,
+                            center = pressPosition
+                        )
+                    }
+                }
             }
 
             // 录音控制按钮已隐藏

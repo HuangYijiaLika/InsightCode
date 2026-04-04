@@ -187,6 +187,8 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     var voiceText by remember { mutableStateOf("") }
     // 用户是否已经点击过
     var hasClicked by remember { mutableStateOf(false) }
+    // 实时语音识别管理器
+    var realtimeRecognitionManager by remember { mutableStateOf<RealtimeRecognitionManager?>(null) }
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
@@ -469,38 +471,48 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
         }
     }
 
+    // 初始化实时语音识别
+    fun initializeRealtimeRecognition() {
+        if (realtimeRecognitionManager == null) {
+            realtimeRecognitionManager = RealtimeRecognitionManager(
+                context = context,
+                apiKey = context.getString(R.string.ai_api_key),
+                onResult = { text ->
+                    recognizedText = text
+                    Log.d("RealtimeRecognition", "识别结果: $text")
+                },
+                onError = { error ->
+                    errorMessage = error
+                    isRecognizing = false
+                }
+            )
+        }
+    }
+
     // 开始语音识别
     fun startSpeechRecognition() {
-        if (speechRecognizer == null) {
-            initializeSpeechRecognizer()
-        }
-
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.CHINA.toString())
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-
-        try {
-            speechRecognizer?.startListening(intent)
-            isRecognizing = true
-            // 清空之前的文字
-            recognizedText = ""
-        } catch (e: Exception) {
-            Log.e("SpeechRecognition", "启动失败", e)
-            errorMessage = "语音识别启动失败: ${e.message}"
-            isRecognizing = false
-        }
+        initializeRealtimeRecognition()
+        realtimeRecognitionManager?.startRecognition()
+        isRecognizing = true
+        recognizedText = ""
     }
 
     // 停止语音识别
     fun stopSpeechRecognition() {
-        speechRecognizer?.stopListening()
+        realtimeRecognitionManager?.stopRecognition()
         isRecognizing = false
     }
 
     // 首次初始化相机
     LaunchedEffect(Unit) {
         initializeCamera()
+    }
+
+    // 释放实时语音识别资源
+    DisposableEffect(Unit) {
+        onDispose {
+            realtimeRecognitionManager?.release()
+        }
     }
 
 

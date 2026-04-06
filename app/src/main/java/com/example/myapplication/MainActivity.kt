@@ -10,7 +10,6 @@ import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.Bundle
 import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Base64
 import android.util.Log
@@ -23,10 +22,8 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -45,7 +42,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.viewModule.PostViewModel
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.unit.dp
@@ -58,45 +54,23 @@ import com.example.myapplication.viewModule.ImageUrl
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import com.example.myapplication.viewModule.Message
 import java.io.ByteArrayOutputStream
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.Image
-import java.nio.ByteBuffer
-import com.example.myapplication.R
-import android.content.Intent
 import java.util.Locale
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.unit.IntOffset
 import android.speech.tts.TextToSpeech
 import android.os.Vibrator
 import android.content.Context
 import android.os.Build
 import com.google.gson.Gson
 import com.example.myapplication.viewModule.AIResponseJson
+import com.example.myapplication.viewModule.Message
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -336,7 +310,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     
     // 拍照并发送给AI
-    fun takePhotoAndSendToAI(includeHistory: Boolean = false) {
+    fun takePhotoAndSendToAI(includeHistory: Boolean = false, sendMessage: String = "带我去灶台") {
         isLoading = true
         errorMessage = null
 
@@ -390,10 +364,12 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                     text = context.getString(R.string.ai_prompt_what)
                                 )
                             )
+
+                            // 添加发送的指令
                             userMessages.add(
                                 Content(
                                     type = "text",
-                                    text = "请带我去灶台前."
+                                    text = sendMessage
                                 )
                             )
                             // 如果需要包含历史voice_text
@@ -473,13 +449,14 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     // 初始化实时语音识别
     fun initializeRealtimeRecognition() {
+        Log.d("RealtimeRecognitionInit","================开始录音================")
         if (realtimeRecognitionManager == null) {
             realtimeRecognitionManager = RealtimeRecognitionManager(
                 context = context,
                 apiKey = context.getString(R.string.ai_api_key),
                 onResult = { text ->
                     recognizedText = text
-                    Log.d("RealtimeRecognition", "识别结果: $text")
+                    Log.d("RealtimeRecognitionInit", "识别结果: $recognizedText")
                 },
                 onError = { error ->
                     errorMessage = error
@@ -494,7 +471,6 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
         initializeRealtimeRecognition()
         realtimeRecognitionManager?.startRecognition()
         isRecognizing = true
-        recognizedText = ""
     }
 
     // 停止语音识别
@@ -550,7 +526,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             if (voiceText.isNotEmpty()) {
                 Text(voiceText)
             } else if (hasClicked && !isRecognizing /*&& !isLoading && errorMessage.isNullOrEmpty()*/) {
-                Text("好的，为你导航到厨房灶台。")
+                Text("好的，开始为你导航。")
             }
 
             // 显示相机预览
@@ -564,21 +540,6 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                         .fillMaxSize()
                         .pointerInput(Unit) {
                             detectTapGestures(
-                                /*onTap = { offset ->
-                                    if (hasMicrophonePermission) {
-                                        pressPosition = offset
-                                        isPressed = true
-                                        recognizedText = "正在识别..."
-                                        startSpeechRecognition()
-                                        coroutineScope.launch {
-                                            delay(3000)
-                                            stopSpeechRecognition()
-                                            isPressed = false
-                                        }
-                                    } else {
-                                        errorMessage = "请先授予麦克风权限"
-                                    }
-                                },*/
                                 onPress = { offset ->
                                     if (hasMicrophonePermission) {
                                         hasClicked = true
@@ -586,14 +547,14 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                         isPressed = true
                                         // 按下时震动
                                         vibrateBasedOnMode("low_freq")
-                                        recognizedText = "长按识别中..."
                                         startSpeechRecognition()
                                         tryAwaitRelease()
                                         stopSpeechRecognition()
                                         // 抬起时震动
                                         vibrateBasedOnMode("low_freq")
                                         isPressed = false
-                                        takePhotoAndSendToAI()
+                                        takePhotoAndSendToAI(false, recognizedText)
+
                                     } else {
                                         errorMessage = "请先授予麦克风权限"
                                     }
@@ -616,88 +577,6 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                 }
             }
 
-            // 录音控制按钮已隐藏
-            /*
-            if (hasMicrophonePermission) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // 长按录音按钮
-                    Box(
-                        modifier = Modifier
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onPress = {
-                                        // 长按开始录音和语音识别
-                                        startSpeechRecognition()
-                                        // 等待用户释放
-                                        tryAwaitRelease()
-                                        // 释放后停止识别
-                                        stopSpeechRecognition()
-                                    },
-                                    onTap = {
-                                        // 点击事件：刷新文字
-                                        recognizedText = ""
-                                    }
-                                )
-                            }
-                    ) {
-                        Button(
-                            modifier = Modifier
-                                .width(200.dp)
-                                .height(60.dp),
-                            onClick = {
-                                // 点击事件：刷新文字
-                                recognizedText = ""
-                            }
-                        ) {
-                            Text(
-                                if (isRecognizing) "正在识别..." else "长按录音",
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-
-                    // 显示识别的文字
-                    if (recognizedText.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .wrapContentHeight(),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                        ) {
-                            Text(
-                                text = recognizedText,
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                    }
-
-                    // 播放录音按钮
-                    Button(
-                        onClick = {
-                            if (!isPlaying && recordedAudioData.isNotEmpty()) {
-                                playRecordedAudio(recordedAudioData) {
-                                    isPlaying = false // 播放完成后重置状态
-                                }
-                                isPlaying = true
-                            }
-                        },
-                        modifier = Modifier
-                            .width(200.dp)
-                            .height(60.dp)
-                            .padding(top = 8.dp)
-                    ) {
-                        Text("播放录音")
-                    }
-                }
-            }
-            */
-
-
         }
     }
 }
@@ -715,133 +594,3 @@ private fun bitmapToBase64(file: File): String? {
         null
     }
 }
-
-
-
-
-private var audioRecord: AudioRecord? = null
-private var recordingThread: Thread? = null
-private var isRecordingActive = false
-
-// 将 Context 作为参数传入，避免在非 Composable 函数中使用 LocalContext.current
-private fun startRecording(audioBuffer: MutableList<ByteArray>, context: android.content.Context) {
-    // 检查麦克风权限
-    if (ContextCompat.checkSelfPermission(
-            context,
-            RECORD_AUDIO
-        ) != PackageManager.PERMISSION_GRANTED) {
-        Log.w("AudioRecord", "No microphone permission granted")
-        return
-    }
-
-    // 清空之前的录音数据
-    audioBuffer.clear()
-
-    val audioSource = MediaRecorder.AudioSource.MIC
-    val sampleRate = 44100
-    val channelConfig = AudioFormat.CHANNEL_IN_MONO
-    val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-
-    val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-
-    audioRecord = AudioRecord(
-        audioSource,
-        sampleRate,
-        channelConfig,
-        audioFormat,
-        bufferSize
-    ).apply {
-        startRecording()
-        isRecordingActive = true
-
-        recordingThread = Thread {
-            val buffer = ByteArray(bufferSize)
-            while (isRecordingActive) {
-                val bytesRead = read(buffer, 0, bufferSize)
-                if (bytesRead > 0) {
-                    val dataCopy = buffer.copyOf(bytesRead)
-                    audioBuffer.add(dataCopy)
-                }
-            }
-        }
-        recordingThread?.start()
-    }
-}
-
-private fun playRecordedAudio(
-    audioData: List<ByteArray>,
-    onPlaybackFinished: () -> Unit // 添加回调参数
-) {
-    // 检查是否有音频数据
-    if (audioData.isEmpty()) {
-        Log.w("AudioPlay", "No audio data to play")
-        return
-    }
-
-    val audioTrackThread = Thread {
-        val sampleRate = 44100
-        val channelConfig = AudioFormat.CHANNEL_OUT_MONO
-        val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-
-        // 计算总大小
-        val totalSize = audioData.sumOf { it.size }
-        val playbackBufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-
-        // 确保缓冲区大小足够大
-        val finalBufferSize = Math.max(playbackBufferSize, totalSize)
-
-        val audioTrack = AudioTrack(
-            AudioManager.STREAM_MUSIC,
-            sampleRate,
-            channelConfig,
-            audioFormat,
-            finalBufferSize,
-            AudioTrack.MODE_STATIC
-        )
-
-        // 将录制的数据复制到 AudioTrack
-        val combinedData = ByteArray(totalSize)
-        var offset = 0
-        for (chunk in audioData) {
-            System.arraycopy(chunk, 0, combinedData, offset, chunk.size)
-            offset += chunk.size
-        }
-
-        val writeResult = audioTrack.write(combinedData, 0, combinedData.size)
-        if (writeResult > 0) {
-            audioTrack.play()
-
-            // 等待播放完成
-            while (audioTrack.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                Thread.sleep(100)
-            }
-        } else {
-            Log.e("AudioPlay", "Failed to write audio data to track")
-        }
-
-        audioTrack.release()
-
-        // 调用回调更新状态
-        Handler(Looper.getMainLooper()).post {
-            onPlaybackFinished()
-        }
-    }
-
-    audioTrackThread.start()
-}
-
-
-
-
-private fun stopRecording() {
-    isRecordingActive = false
-    audioRecord?.apply {
-        stop()
-        release()
-    }
-    audioRecord = null
-    recordingThread?.interrupt()
-    recordingThread = null
-}
-
-//val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current

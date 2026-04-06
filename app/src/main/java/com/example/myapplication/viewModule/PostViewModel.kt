@@ -1,8 +1,5 @@
 package com.example.myapplication.viewModule
 
-import android.media.Image
-import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

@@ -166,6 +166,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     // 存储录制的音频数据
     val recordedAudioData = remember { mutableListOf<ByteArray>() }
+
     // 相机预览视图
     val previewView = remember { PreviewView(context) }
     var imageCapture: ImageCapture? = remember { null }

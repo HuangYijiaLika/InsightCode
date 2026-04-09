@@ -139,7 +139,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     var recognizedText by remember { mutableStateOf("") }
     var speechRecognizer: SpeechRecognizer? = remember { null }
     // 文字转语音相关
-    var textToSpeech: TextToSpeech? = remember { null }
+    var ttsManager by remember { mutableStateOf<TTSManager?>(null) }
     // 震动相关
     var vibrator: Vibrator? = remember { null }
     // 加载状态
@@ -258,13 +258,9 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     // 初始化文字转语音
     fun initializeTextToSpeech() {
-        textToSpeech = TextToSpeech(context) {
-            if (it == TextToSpeech.SUCCESS) {
-                textToSpeech?.setLanguage(Locale.CHINA)
-                Log.d("TextToSpeech", "初始化成功")
-            } else {
-                Log.e("TextToSpeech", "初始化失败")
-            }
+        if (ttsManager == null) {
+            ttsManager = TTSManager(context)
+            Log.d("TTSManager", "初始化成功")
         }
     }
 
@@ -280,10 +276,16 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     // 文字转语音
     fun speakText(text: String) {
-        if (textToSpeech == null) {
+        if (ttsManager == null) {
             initializeTextToSpeech()
         }
-        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        coroutineScope.launch {
+            ttsManager?.textToSpeech(text) { success, error ->
+                if (!success && error != null) {
+                    Log.e("TTS", "语音合成失败: $error")
+                }
+            }
+        }
     }
 
     // 根据vibration_mode进行震动
@@ -384,7 +386,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                             }*/
 
                             // 发送给AI
-                            viewModel.fetchPost("qwen3-vl-flash", userMessages, context.getString(R.string.ai_api_key))
+                            viewModel.fetchPost("qwen3.6-plus", userMessages, context.getString(R.string.ai_api_key))
 
                             // 删除临时文件
                             photoFile.delete()
@@ -485,10 +487,11 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
         initializeCamera()
     }
 
-    // 释放实时语音识别资源
+    // 释放资源
     DisposableEffect(Unit) {
         onDispose {
             realtimeRecognitionManager?.release()
+            ttsManager?.release()
         }
     }
 

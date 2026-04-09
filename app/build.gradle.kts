@@ -91,4 +91,7 @@ dependencies {
 
     // OkHttp for WebSocket
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+    // DashScope SDK for TTS
+    implementation("com.alibaba.dashscope:dashscope-sdk-java:1.12.0")
 }

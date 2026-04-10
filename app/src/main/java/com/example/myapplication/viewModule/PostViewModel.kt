@@ -16,6 +16,7 @@ data class ChatRequest(
     val messages: List<Message>,
     val stream: Boolean = false,
     val enable_thinking: Boolean = false,
+    val response_format: ResponseFormat = ResponseFormat(),
 //    val stream_options: StreamOptions? = null // 新增流式传输选项
 )
 
@@ -23,7 +24,11 @@ data class Message(
     val role: String,
     val content: List<Content>
 )
+data class ResponseFormat (
+    val type:  String = "json_object",
 
+
+)
 data class Content(
     val type: String,
     val image_url: ImageUrl? = null, // 图像内容
@@ -65,7 +70,9 @@ data class AIResponseJson(
     val vibration_mode: String,
     val is_task_complete: Boolean,
     val next_transmission_ms: Int,
-    val interaction_grid: Map<String, String>? = null
+    val interaction_grid: Map<String, String>? = null,
+    val history: String = "",
+
 )
 
 interface ApiService {

@@ -71,6 +71,7 @@ import android.os.Build
 import com.google.gson.Gson
 import com.example.myapplication.viewModule.AIResponseJson
 import com.example.myapplication.viewModule.Message
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -313,7 +314,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
     
     // 拍照并发送给AI
-    fun takePhotoAndSendToAI(includeHistory: Boolean = false, sendMessage: String = "带我去灶台") {
+    fun takePhotoAndSendToAI(includeHistory: Boolean = false, sendMessage: String = "带我去厕所") {
         isLoading = true
         errorMessage = null
 
@@ -376,14 +377,14 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                 )
                             )
                             // 如果需要包含历史voice_text
-                            /*if (includeHistory && historyVoiceText.isNotEmpty()) {
+                            if (includeHistory && historyVoiceText.isNotEmpty()) {
                                 userMessages.add(
                                     Content(
                                         type = "text",
-                                        text = "历史语音指令，仅作为参考: $historyVoiceText"
+                                        text = "引导历史摘要: $historyVoiceText"
                                     )
                                 )
-                            }*/
+                            }
 
                             // 发送给AI
                             viewModel.fetchPost("qwen3.6-plus", userMessages, context.getString(R.string.ai_api_key))
@@ -430,7 +431,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
 
             
             // 2. 保存历史voice_text
-            historyVoiceText +=aiResponse.voice_text+","
+            historyVoiceText = aiResponse.history
             // 3. 根据vibration_mode进行震动
             // 4. 如果is_task_complete为假，定时自动发送图片
             if (!aiResponse.is_task_complete) {

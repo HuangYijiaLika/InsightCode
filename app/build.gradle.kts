@@ -78,7 +78,7 @@ dependencies {
     // If you want to additionally use the CameraX Extensions library
     implementation("androidx.camera:camera-extensions:${camerax_version}")
 
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.code.gson:gson:2.13.1")
 
     //权限请求
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
@@ -93,5 +93,5 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     
     // DashScope SDK for TTS
-    implementation("com.alibaba.dashscope:dashscope-sdk-java:1.12.0")
+    implementation("com.alibaba:dashscope-sdk-java:2.21.16")
 }

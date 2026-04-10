@@ -15,6 +15,7 @@ data class ChatRequest(
     val model: String,
     val messages: List<Message>,
     val stream: Boolean = false,
+    val enable_thinking: Boolean = false,
 //    val stream_options: StreamOptions? = null // 新增流式传输选项
 )
 
@@ -100,6 +101,7 @@ class PostViewModel : ViewModel() {
             )
             ,
             stream = false,
+            enable_thinking = false,
 //            stream_options = StreamOptions(include_usage = false)
         )
         val gson = Gson()

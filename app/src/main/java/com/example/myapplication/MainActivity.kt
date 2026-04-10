@@ -154,10 +154,12 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
     // 自动发送处理器
     var autoSendHandler: Handler? = remember { null }
     // 任务完成状态
-    var isTaskComplete by remember { mutableStateOf(false) }
+    var isTaskComplete by remember { mutableStateOf(true) }
     // 点击位置和光晕状态
     var isPressed by remember { mutableStateOf(false) }
     var pressPosition by remember { mutableStateOf(Offset.Zero) }
+    // 解析后的任务类型
+    var taskType by remember { mutableStateOf("navigation") }
     // 解析后的voice_text
     var voiceText by remember { mutableStateOf("") }
     // 用户是否已经点击过
@@ -312,7 +314,27 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
         }
     }
 
-    
+    //
+    fun AiChoose(sendMessage: String = "带我去厕所") {
+        // 构建请求消息
+        val userMessages = mutableListOf<Content>()
+        // 添加提示词
+        userMessages.add(
+            Content(
+                type = "text",
+                text = context.getString(R.string.ai_prompt_choose)
+            )
+        )
+        // 添加发送的指令
+        userMessages.add(
+            Content(
+                type = "text",
+                text = sendMessage
+            )
+        )
+        // 发送给AI
+        viewModel.fetchPost("qwen3.6-plus", userMessages, context.getString(R.string.ai_api_key))
+    }
     // 拍照并发送给AI
     fun takePhotoAndSendToAI(includeHistory: Boolean = false, sendMessage: String = "带我去厕所") {
         isLoading = true
@@ -360,12 +382,17 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                     image_url = ImageUrl(url = "data:image/jpeg;base64,$base64Image")
                                 )
                             )
-                            
+                            var sysPrompt = ""
+                            if (taskType.toString().equals("panel")) {
+                                sysPrompt = context.getString(R.string.ai_prompt_panel)
+                            } else {
+                                sysPrompt = context.getString(R.string.ai_prompt_what)
+                            }
                             // 添加提示词
                             userMessages.add(
                                 Content(
                                     type = "text",
-                                    text = context.getString(R.string.ai_prompt_what)
+                                    text = sysPrompt
                                 )
                             )
 
@@ -422,10 +449,16 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             
             val gson = Gson()
             val aiResponse = gson.fromJson(cleanedJsonString, AIResponseJson::class.java)
-
+            if (aiResponse.type.isNotEmpty()) {
+                taskType = aiResponse.type
+                Log.d("taskType", "taskType: $taskType")
+                takePhotoAndSendToAI(false, recognizedText)
+                return
+            }
             // 保存voice_text到状态变量
-            voiceText = aiResponse.voice_text
-
+            voiceText = jsonString
+//            voiceText = aiResponse.voice_text
+            Log.d("voiceText", "voiceText: $voiceText")
             // 1. 将voice_text转语音
             speakText(aiResponse.voice_text)
 
@@ -436,6 +469,7 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
             // 4. 如果is_task_complete为假，定时自动发送图片
             if (!aiResponse.is_task_complete) {
                 vibrateBasedOnMode(aiResponse.vibration_mode)
+                Log.d("DELAY", "delay: ${aiResponse.next_transmission_ms} ms")
                 autoSendHandler?.removeCallbacksAndMessages(null)
                 autoSendHandler = Handler(Looper.getMainLooper())
                 autoSendHandler?.postDelayed({
@@ -546,7 +580,9 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onPress = { offset ->
-                                    if (hasMicrophonePermission) {
+                                    if (!isTaskComplete) {
+                                        Log.w("RealtimeRecognitionInit", "任务未完成")
+                                    } else if (hasMicrophonePermission) {
                                         hasClicked = true
                                         pressPosition = offset
                                         isPressed = true
@@ -558,7 +594,8 @@ fun PostScreen(modifier: Modifier = Modifier, viewModel: PostViewModel = PostVie
                                         // 抬起时震动
                                         vibrateBasedOnMode("low_freq")
                                         isPressed = false
-                                        takePhotoAndSendToAI(false, recognizedText)
+                                        isTaskComplete = false
+                                        AiChoose(recognizedText)
 
                                     } else {
                                         errorMessage = "请先授予麦克风权限"

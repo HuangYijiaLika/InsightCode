@@ -66,13 +66,13 @@ data class GetMessage(
 
 // AI响应的JSON结构
 data class AIResponseJson(
-    val voice_text: String,
-    val vibration_mode: String,
-    val is_task_complete: Boolean,
-    val next_transmission_ms: Int,
+    val voice_text: String = "",
+    val vibration_mode: String = "",
+    val is_task_complete: Boolean = false,
+    val next_transmission_ms: Int = 5000,
     val interaction_grid: Map<String, String>? = null,
     val history: String = "",
-
+    val type: String = "",
 )
 
 interface ApiService {

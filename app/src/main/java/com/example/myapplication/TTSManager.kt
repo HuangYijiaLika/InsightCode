@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.content.Context
 import android.media.MediaPlayer
+import android.os.Build
 import com.alibaba.dashscope.aigc.multimodalconversation.AudioParameters
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversation
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationParam
@@ -20,9 +21,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class TTSManager(private val context: Context) {
-    private val MODEL = "qwen3-tts-flash"
+    private val MODEL = "qwen3-tts-instruct-flash"
     private val apiKey = context.getString(R.string.ai_api_key)
     private var mediaPlayer: MediaPlayer? = null
+    private var playbackSpeed: Float = 1.25f // 默认倍速
     
     init {
         // 设置API基础URL为北京地域
@@ -40,6 +42,7 @@ class TTSManager(private val context: Context) {
                 .text(text)
                 .voice(AudioParameters.Voice.CHERRY)
                 .languageType("Chinese")
+                .parameter("instructions","语速特别快")
                 .build()
             
             val result = conv.call(param)
@@ -103,6 +106,9 @@ class TTSManager(private val context: Context) {
                 setDataSource(audioFile.absolutePath)
                 setOnPreparedListener { mp ->
                     Log.d("TTS", "音频准备完成，开始播放")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        mp.playbackParams = mp.playbackParams.setSpeed(playbackSpeed)
+                    }
                     mp.start()
                 }
                 setOnCompletionListener { mp ->
